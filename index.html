@@ -1,1 +1,100 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Business Alliance LAB</title>
+<style>
+:root{font-family:system-ui,Arial,sans-serif;color:#17283a;background:#edf3f8}*{box-sizing:border-box}body{margin:0}.wrap{max-width:1020px;margin:auto;padding:28px 16px}header{margin-bottom:24px}.tag{color:#16608c;font-size:13px;font-weight:800;letter-spacing:.1em}h1{font-size:clamp(28px,5vw,48px);margin:8px 0}p{line-height:1.55}.card{background:white;border:1px solid #dce4eb;border-radius:20px;padding:20px;box-shadow:0 4px 20px #18324b0a}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin:18px 0}h3{margin:0 0 8px}.meta{color:#566c7e;font-size:13px}.bar{background:#e6edf4;height:8px;border-radius:9px;overflow:hidden;margin:14px 0}.fill{height:100%;background:#2388c8;transition:width .3s}.full .fill{background:#9caab7}button{border:0;border-radius:10px;padding:11px 16px;font-weight:700;background:#176b9d;color:white;cursor:pointer}button:disabled{background:#a9b6c2;cursor:not-allowed}input{width:100%;max-width:320px;padding:12px;border:1px solid #b8c8d4;border-radius:10px;font-size:16px}.alert{background:#fff4d6;border-radius:12px;padding:14px;margin:16px 0}.success{background:#e7f6ee;border-radius:12px;padding:18px}.hidden{display:none!important}.small{font-size:13px;color:#5a6b7a}ul{padding-left:22px}.company-view{display:grid;gap:16px}.stats{display:flex;flex-wrap:wrap;gap:12px}.stat{background:#edf3f8;padding:12px 16px;border-radius:12px;min-width:150px}.stat strong{display:block;font-size:20px}.mission{border:2px solid #d4a02d;background:#fff9e9;border-radius:16px;padding:20px}.mission h3{display:flex;align-items:center;gap:8px}.members{display:flex;flex-wrap:wrap;gap:8px}.member{padding:8px 12px;border-radius:99px;background:#e7f0f8}.eyebrow{font-size:12px;text-transform:uppercase;letter-spacing:.12em;font-weight:800;color:#176b9d}.muted{color:#5a6b7a}.footer-note{font-size:12px;color:#687987}
+</style>
+</head>
+<body>
+<main class="wrap">
+<header><div class="tag">SYMULACJA • WSPÓŁPRACA PRZEDSIĘBIORSTW</div><h1>BUSINESS ALLIANCE LAB</h1><p id="intro">Wpisz imię i kliknij „Dołącz do gry”. System automatycznie przydzieli Cię do zespołu.</p></header>
+<section id="selection">
+<section class="card"><label for="name"><b>Twoje imię lub pseudonim</b></label><p class="small">Nie podawaj nazwiska ani innych danych osobowych.</p><input id="name" maxlength="32" placeholder="np. Ola"><p id="status" role="status">Łączenie z Firebase…</p></section>
+<section class="card"><button id="joinButton" type="button" disabled>Dołącz do gry</button><p class="small">Przydział następuje automatycznie do jednego z najmniej licznych zespołów (maks. 5 osób).</p></section><section id="firms" class="grid"></section>
+<section class="card"><h3>Co dalej?</h3><p>Po przydzieleniu firmy otworzy się jej karta. Poznajcie firmę i wspólnie ustalcie, kto zaprezentuje ją pozostałym zespołom.</p></section>
+</section>
+<section id="companyPage" class="company-view hidden" aria-live="polite">
+<div class="card"><div class="eyebrow">Karta przedsiębiorstwa</div><h2 id="companyTitle"></h2><p id="companyIndustry" class="meta"></p><div class="stats"><div class="stat"><span>Budżet</span><strong id="companyBudget"></strong></div><div class="stat"><span>Pracownicy</span><strong id="companyStaff"></strong></div></div><h3>Kim jesteście?</h3><p id="companyDescription"></p><h3>Wasz cel biznesowy</h3><p id="companyGoal"></p></div>
+<div class="card"><div class="eyebrow">Twój zarząd</div><h3>Skład zespołu <span id="memberCount"></span></h3><div id="memberList" class="members"></div><p class="small">Wybierzcie rzecznika zespołu. Pozostałe obowiązki możecie dzielić elastycznie.</p></div>
+<div class="mission"><h3>🔒 Poufne: misja zarządu</h3><p id="missionTeaser">Odkryjcie ją dopiero na sygnał prowadzącej. Nie pokazujcie misji pozostałym firmom.</p><button id="revealButton" type="button">Odkryj tajną misję</button><div id="missionContent" class="hidden"><p id="missionText"></p><p class="small"><b>Uwaga:</b> informacja jest poufna w ramach zasad symulacji.</p></div></div>
+<div class="card"><h3>Wasze pierwsze zadanie</h3><p>Przygotujcie krótką odpowiedź: <b>co możecie zaoferować innym firmom i czego od nich potrzebujecie?</b></p></div>
+<p class="footer-note">Przypisanie firmy jest powiązane z anonimowym kontem tej przeglądarki. Po odświeżeniu strona ponownie otworzy kartę firmy, o ile zapis nadal istnieje.</p>
+</section>
+</main>
+<script type="module">
+import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
+import {getAuth,signInAnonymously,onAuthStateChanged} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
+import {getDatabase,ref,onValue,runTransaction,get} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-database.js';
+const config={apiKey:'AIzaSyCaCyTnyNh0JC9xvgL8K386Xtp9PsJZYBQ',authDomain:'business-alliance-lab.firebaseapp.com',databaseURL:'https://business-alliance-lab-default-rtdb.europe-west1.firebasedatabase.app',projectId:'business-alliance-lab',storageBucket:'business-alliance-lab.firebasestorage.app',messagingSenderId:'415660693434',appId:'1:415660693434:web:bddadb06a35f62cf866f83'};
+const ids=['nexora','ecoform','fastway','brandup','innolab','skillforge'];
+const profiles={
+ nexora:{label:'NEXORA TECH',industry:'Technologia i sztuczna inteligencja',staff:22,budget:400000,description:'Tworzycie oprogramowanie oparte na AI. Macie kompetentny zespół i gotową technologię, ale niewielką sieć sprzedaży. Samodzielne wejście na nowe rynki byłoby kosztowne.',goal:'Pozyskać klientów i partnerów dystrybucyjnych, aby zwiększyć skalę sprzedaży.',mission:'Nawiążcie współpracę z firmą, która zapewni dostęp do klientów lub kanałów dystrybucji. Nie możecie jednak przyznać żadnemu partnerowi wyłącznych praw do dystrybucji Waszej technologii.'},
+ ecoform:{label:'ECOFORM',industry:'Produkcja ekologicznych opakowań',staff:85,budget:700000,description:'Produkujecie ekologiczne opakowania dla firm. Dysponujecie zapleczem produkcyjnym i doświadczoną kadrą, ale rosnące koszty oraz presja konkurencyjna wymuszają modernizację procesów.',goal:'Pozyskać technologię, automatyzację lub wsparcie badawczo-rozwojowe zwiększające efektywność produkcji.',mission:'Zdobądźcie dostęp do nowego rozwiązania technologicznego na zasadzie licencji lub umowy współpracy. Nie chcecie kupować własności intelektualnej na wyłączność — priorytetem jest możliwość korzystania z technologii przy kontrolowanych kosztach.'},
+ fastway:{label:'FASTWAY',industry:'Logistyka i transport',staff:60,budget:600000,description:'Obsługujecie transport i dostawy dla przedsiębiorstw. Macie flotę i zespół operacyjny, ale część zasobów pozostaje niewykorzystana.',goal:'Zwiększyć wykorzystanie zasobów logistycznych z 65% do 85%.',mission:'Wynegocjujcie co najmniej dwa nowe kontrakty logistyczne z innymi firmami. Zależy Wam na regularnych zleceniach, nie na pojedynczych dostawach.'},
+ brandup:{label:'BRANDUP',industry:'Marketing i sprzedaż',staff:18,budget:250000,description:'Jesteście agencją marketingowo-sprzedażową, która potrafi budować marki i pozyskiwać klientów. Dysponujecie sprawnym zespołem, ale potrzebujecie większych projektów.',goal:'Zostać kluczowym partnerem odpowiedzialnym za marketing i sprzedaż nowego wspólnego przedsięwzięcia.',mission:'Dążcie do uzyskania wyłączności na obsługę marketingową wspólnego przedsięwzięcia. Jeśli partnerzy nie zgodzą się na pełną wyłączność, negocjujcie przynajmniej pierwszeństwo w realizacji kampanii.'},
+ innolab:{label:'INNOLAB',industry:'Badania i rozwój (R&D)',staff:14,budget:350000,description:'Projektujecie i testujecie innowacyjne rozwiązania. Macie know-how i potencjał badawczy, ale ograniczone możliwości samodzielnej komercjalizacji.',goal:'Znaleźć partnerów, którzy pomogą wdrożyć i sprzedać rezultaty Waszych prac.',mission:'Zawrzyjcie współpracę umożliwiającą wdrożenie wyników badań, ale zachowajcie prawa własności intelektualnej do opracowanych rozwiązań. Możecie proponować licencje, lecz nie sprzedaż praw.'},
+ skillforge:{label:'SKILLFORGE',industry:'Szkolenia i doradztwo',staff:12,budget:200000,description:'Projektujecie programy rozwojowe i prowadzicie szkolenia dla firm. Macie doświadczenie i materiały edukacyjne, ale brakuje Wam własnej platformy cyfrowej.',goal:'Uruchomić cyfrową ofertę szkoleń we współpracy z partnerem technologicznym.',mission:'Pozyskajcie dostęp do platformy cyfrowej, zachowując prawa do swoich treści szkoleniowych i bezpośrednią relację z klientami. Nie zgadzajcie się na oddanie partnerowi całej bazy klientów.'}
+};
+const app=initializeApp(config),auth=getAuth(app),db=getDatabase(app);
+let uid=null,companies={},slots={},assignment=null,busy=false,loaded=false,revealedFor=null;
+const el=id=>document.getElementById(id);
+function msg(s){el('status').textContent=s}
+function safe(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function findMine(){for(const id of ids){for(let i=1;i<=5;i++){const item=slots[id]?.[String(i)];if(item?.uid===uid)return id}}return null}
+function drawCompany(id){const p=profiles[id];el('companyTitle').textContent=p.label;el('companyIndustry').textContent=p.industry;el('companyBudget').textContent=p.budget.toLocaleString('pl-PL')+' zł';el('companyStaff').textContent=p.staff+' osób';el('companyDescription').textContent=p.description;el('companyGoal').textContent=p.goal;const members=Object.values(slots[id]||{}).filter(Boolean);el('memberCount').textContent=`(${members.length}/5)`;el('memberList').innerHTML=members.map(m=>`<span class="member">${safe(m.name)}</span>`).join('')||'<span class="muted">Wczytywanie…</span>';el('missionText').textContent=p.mission;const visible=revealedFor===id;el('missionContent').classList.toggle('hidden',!visible);el('revealButton').textContent=visible?'Ukryj tajną misję':'Odkryj tajną misję';el('missionTeaser').classList.toggle('hidden',visible)}
+function draw(){
+ assignment=findMine();const joined=!!assignment;
+ el('selection').classList.toggle('hidden',joined);el('companyPage').classList.toggle('hidden',!joined);
+ el('intro').textContent=joined?'Twoja karta przedsiębiorstwa i misja zarządu.':'Wpisz imię i kliknij „Dołącz do gry”. System automatycznie przydzieli Cię do zespołu.';
+ if(joined){drawCompany(assignment);return}
+ const total=ids.reduce((n,id)=>n+Object.values(slots[id]||{}).filter(Boolean).length,0);
+ el('firms').innerHTML=ids.map(id=>{const p=profiles[id],n=Object.values(slots[id]||{}).filter(Boolean).length;return `<article class="card"><h3>${safe(p.label)}</h3><div class="meta">${safe(p.industry)}</div><p><b>${n} / 5</b> uczestników</p><div class="bar"><div class="fill" style="width:${Math.min(100,n/5*100)}%"></div></div></article>`}).join('');
+ el('joinButton').disabled=!uid||!loaded||busy||total>=30;
+ if(total>=30)msg('Wszystkie 30 miejsc są zajęte.');
+}
+const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+async function join(){
+ if(busy||!uid||!loaded||findMine())return;
+ const name=el('name').value.trim();
+ if(name.length<2||name.length>32){msg('Wpisz imię lub pseudonim (2–32 znaki).');return}
+ busy=true;draw();msg('Przydzielam do zespołu…');
+ try{
+  // Transakcje na pojedynczych miejscach są zgodne z regułami ograniczającymi studentów do własnego wpisu.
+  // Losujemy wśród najmniej licznych zespołów; przy kolizji pobieramy aktualny stan i próbujemy ponownie.
+  for(let attempt=0;attempt<35;attempt++){
+   if(findMine())return;
+   const snap=await get(ref(db,'slots'));
+   const live=snap.val()||{};
+   for(const id of ids)for(const person of Object.values(live[id]||{}))if(person?.uid===uid){slots=live;draw();return}
+   const ranked=ids.map(id=>({id,count:Object.values(live[id]||{}).filter(Boolean).length})).filter(x=>x.count<5);
+   if(!ranked.length){msg('Brak wolnych miejsc.');return}
+   const least=Math.min(...ranked.map(x=>x.count));
+   const choices=ranked.filter(x=>x.count===least).sort(()=>Math.random()-.5);
+   let reserved=false;
+   for(const {id} of choices){
+    const occupied=live[id]||{};
+    const available=[1,2,3,4,5].filter(i=>!occupied[String(i)]);
+    for(const i of available){
+     const result=await runTransaction(ref(db,`slots/${id}/${i}`),current=>current===null?{uid,name}:undefined,{applyLocally:false});
+     if(result.committed){reserved=true;break}
+    }
+    if(reserved)break;
+   }
+   if(reserved){msg('Przydział zapisany!');return}
+   await wait(100+Math.random()*200);
+  }
+  msg('Dużo osób dołącza jednocześnie. Spróbuj ponownie za chwilę.');
+ }catch(e){msg('Nie udało się przydzielić firmy: '+(e.code||e.message))}
+ finally{busy=false;draw()}
+}
+el('joinButton').addEventListener('click',join);
+el('revealButton').addEventListener('click',()=>{if(!assignment)return;revealedFor=revealedFor===assignment?null:assignment;drawCompany(assignment)});
+onAuthStateChanged(auth,u=>{if(!u)return;uid=u.uid;msg('Połączono. Wpisz imię i dołącz do gry.');onValue(ref(db,'companies'),s=>{companies=s.val()||{};draw()},e=>msg('Błąd odczytu firm: '+e.code));onValue(ref(db,'slots'),s=>{slots=s.val()||{};loaded=true;draw()},e=>msg('Błąd odczytu miejsc: '+e.code))});
+signInAnonymously(auth).catch(e=>msg('Błąd logowania: '+e.code));
+</script>
+</body>
+</html>
 
