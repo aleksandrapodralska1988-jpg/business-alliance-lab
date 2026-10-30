@@ -29,7 +29,6 @@ import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from 'htt
 import {getDatabase,ref,onValue,remove,runTransaction} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-database.js';
 const config={apiKey:'AIzaSyCaCyTnyNh0JC9xvgL8K386Xtp9PsJZYBQ',authDomain:'business-alliance-lab.firebaseapp.com',databaseURL:'https://business-alliance-lab-default-rtdb.europe-west1.firebasedatabase.app',projectId:'business-alliance-lab',storageBucket:'business-alliance-lab.firebasestorage.app',messagingSenderId:'415660693434',appId:'1:415660693434:web:bddadb06a35f62cf866f83'};
 const ADMIN_UID='Qs1UOF02dLbR2bOse2nZBLptcAA2';
-const MAX=5;
 const ids=['nexora','ecoform','fastway','brandup','innolab','skillforge'];
 const labels={nexora:'NEXORA TECH',ecoform:'ECOFORM',fastway:'FASTWAY',brandup:'BRANDUP',innolab:'INNOLAB',skillforge:'SKILLFORGE'};
 const app=initializeApp(config),auth=getAuth(app),db=getDatabase(app);
@@ -42,12 +41,36 @@ let total=0;
 el('teams').innerHTML=ids.map(id=>{
 const people=Object.values(slots[id]||{}).filter(x=>x&&typeof x==='object');
 const n=people.length;total+=n;
-const names=people.length?`<ol class="members">${people.map(p=>`<li>${safe(p.name||'Bez imienia')} <button class="outline" style="padding:4px 8px;font-size:12px" data-move="${safe(p.uid)}" data-from="${id}">Przenieś</button></li>`).join('')}</ol>`:'<p class="muted">Brak zapisanych osób.</p>';
-return `<article class="card"><h3>${safe(labels[id])}</h3><div class="count">${n} / ${MAX} miejsc</div><div class="bar"><div class="fill" style="width:${Math.min(100,n/MAX*100)}%"></div></div>${names}</article>`;
+const names=people.length?`<ol class="members">${people.map(p=>`<li>${safe(p.name||'Bez imienia')} <button class="outline" type="button" data-move="${safe(p.uid)}" style="padding:4px 7px;font-size:12px">Przenieś</button></li>`).join('')}</ol>`:'<p class="muted">Brak zapisanych osób.</p>';
+return `<article class="card"><h3>${safe(labels[id])}</h3><div class="count">${n} / 5 miejsc</div><div class="bar"><div class="fill" style="width:${Math.min(100,n/5*100)}%"></div></div>${names}</article>`;
 }).join('');
+el('teams').querySelectorAll('[data-move]').forEach(b=>b.addEventListener('click',()=>moveStudent(b.dataset.move)));
 el('summary').textContent=`Łącznie zajętych miejsc: ${total} / 30. Dane aktualizują się automatycznie.`;
 }
-el('teams').addEventListener('click',async e=>{const btn=e.target.closest('button[data-move]');if(!btn||auth.currentUser?.uid!==ADMIN_UID)return;const personUid=btn.dataset.move,from=btn.dataset.from;const to=window.prompt('Przenieś uczestnika do firmy. Wpisz jedną z nazw: '+ids.join(', '));if(!to)return;const target=to.trim().toLowerCase();if(!ids.includes(target)||target===from){status('Niepoprawna lub niezmieniona firma.');return}btn.disabled=true;try{const result=await runTransaction(ref(db,'slots'),current=>{if(!current||typeof current!=='object')return;let sourceSlot=null;for(const [k,v] of Object.entries(current[from]||{})){if(v?.uid===personUid){sourceSlot=k;break}}if(!sourceSlot)return;const count=Object.values(current[target]||{}).filter(Boolean).length;if(count>=MAX)return;let free=1;while(current[target]?.[String(free)]&&free<=MAX)free++;if(free>MAX)return;current[target]??={};current[target][String(free)]=current[from][sourceSlot];delete current[from][sourceSlot];return current},{applyLocally:false});status(result.committed?'Uczestnik przeniesiony.':'Nie przeniesiono: brak miejsca lub zapis uległ zmianie.')}catch(err){status('Błąd przenoszenia: '+(err.code||err.message))}finally{btn.disabled=false}});
+async function moveStudent(studentUid){
+ if(auth.currentUser?.uid!==ADMIN_UID)return;
+ let source=null,sourceSlot=null,student=null;
+ for(const id of ids)for(const [slot,p] of Object.entries(slots[id]||{}))if(p?.uid===studentUid){source=id;sourceSlot=slot;student=p}
+ if(!student)return;
+ const choices=ids.filter(id=>id!==source).map((id,i)=>`${i+1}. ${labels[id]} (${Object.values(slots[id]||{}).filter(Boolean).length}/5)`).join('\n');
+ const answer=window.prompt(`Przenieś ${student.name} z ${labels[source]}.\nWybierz numer firmy:\n${choices}`);
+ if(answer===null)return;
+ const target=ids.filter(id=>id!==source)[Number(answer)-1];
+ if(!target){status('Nieprawidłowy numer firmy.');return}
+ if(!window.confirm(`Przenieść ${student.name} do ${labels[target]}?`))return;
+ try{
+  const result=await runTransaction(ref(db,'slots'),all=>{
+   if(!all?.[source]?.[sourceSlot]||all[source][sourceSlot].uid!==studentUid)return;
+   const occupied=Object.values(all[target]||{}).filter(Boolean).length;
+   if(occupied>=5)return;
+   const free=[1,2,3,4,5].find(i=>!all[target]?.[String(i)]);
+   if(!free)return;
+   all[target]??={};all[target][String(free)]=all[source][sourceSlot];delete all[source][sourceSlot];
+   return all;
+  },{applyLocally:false});
+  status(result.committed?'Przeniesiono uczestnika.':'Nie udało się przenieść: miejsce zajęte lub zapis zmieniony.');
+ }catch(e){status('Błąd przenoszenia: '+(e.code||e.message))}
+}
 el('loginForm').addEventListener('submit',async e=>{
 e.preventDefault();el('loginBtn').disabled=true;status('Logowanie…');
 try{const result=await signInWithEmailAndPassword(auth,el('email').value.trim(),el('password').value);el('password').value='';if(result.user.uid!==ADMIN_UID){await signOut(auth);status('To konto nie ma uprawnień prowadzącej.');}}
